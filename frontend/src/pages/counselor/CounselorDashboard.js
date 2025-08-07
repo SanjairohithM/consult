@@ -1,17 +1,35 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Calendar, Clock, DollarSign, Users, TrendingUp, Settings, MessageSquare, Video } from 'lucide-react';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+
+import {
+  Clock,
+  DollarSign,
+  Users,
+  TrendingUp,
+  Settings,
+  MessageSquare,
+  Video,
+  Calendar as CalendarIcon,
+} from 'lucide-react';
 
 export default function CounselorDashboard() {
   const [counselor, setCounselor] = useState(null);
   const [appointments, setAppointments] = useState([]);
-  const [earnings, setEarnings] = useState({ total: 0, thisMonth: 0, thisWeek: 0 });
+  const [earnings, setEarnings] = useState({
+    total: 0,
+    thisMonth: 0,
+    thisWeek: 0,
+  });
   const [loading, setLoading] = useState(true);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
   const [stats, setStats] = useState({
     totalSessions: 0,
     averageRating: 0,
     totalClients: 0,
-    upcomingSessions: 0
+    upcomingSessions: 0,
   });
 
   useEffect(() => {
@@ -20,45 +38,48 @@ export default function CounselorDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch counselor profile
       const profileRes = await axios.get('/api/auth/me');
       setCounselor(profileRes.data);
 
-      // Fetch appointments
       const appointmentsRes = await axios.get('/api/appointments');
       setAppointments(appointmentsRes.data);
 
-      // Calculate stats
-      const upcomingSessions = appointmentsRes.data.filter(apt => 
-        new Date(apt.date) > new Date() && apt.status === 'confirmed'
+      const upcomingSessions = appointmentsRes.data.filter(
+        (apt) =>
+          new Date(apt.date) > new Date() && apt.status === 'confirmed'
       ).length;
 
-      const completedSessions = appointmentsRes.data.filter(apt => 
-        apt.status === 'completed'
+      const completedSessions = appointmentsRes.data.filter(
+        (apt) => apt.status === 'completed'
       ).length;
 
-      const totalEarnings = completedSessions * (profileRes.data.hourlyRate || 100);
+      const totalEarnings =
+        completedSessions * (profileRes.data.hourlyRate || 100);
+
       const thisMonthEarnings = appointmentsRes.data
-        .filter(apt => {
+        .filter((apt) => {
           const aptDate = new Date(apt.date);
           const now = new Date();
-          return apt.status === 'completed' && 
-                 aptDate.getMonth() === now.getMonth() &&
-                 aptDate.getFullYear() === now.getFullYear();
+          return (
+            apt.status === 'completed' &&
+            aptDate.getMonth() === now.getMonth() &&
+            aptDate.getFullYear() === now.getFullYear()
+          );
         })
-        .reduce((sum, apt) => sum + (profileRes.data.hourlyRate || 100), 0);
+        .reduce((sum) => sum + (profileRes.data.hourlyRate || 100), 0);
 
       setStats({
         totalSessions: completedSessions,
         averageRating: profileRes.data.rating || 0,
-        totalClients: new Set(appointmentsRes.data.map(apt => apt.clientId)).size,
-        upcomingSessions
+        totalClients: new Set(appointmentsRes.data.map((apt) => apt.clientId))
+          .size,
+        upcomingSessions,
       });
 
       setEarnings({
         total: totalEarnings,
         thisMonth: thisMonthEarnings,
-        thisWeek: thisMonthEarnings * 0.25 // Approximate
+        thisWeek: thisMonthEarnings * 0.25,
       });
 
       setLoading(false);
@@ -70,33 +91,33 @@ export default function CounselorDashboard() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'confirmed': return 'bg-green-100 text-green-800';
-      case 'scheduled': return 'bg-blue-100 text-blue-800';
-      case 'in-progress': return 'bg-orange-100 text-orange-800';
-      case 'completed': return 'bg-purple-100 text-purple-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'confirmed':
+        return 'bg-green-100 text-green-800';
+      case 'scheduled':
+        return 'bg-blue-100 text-blue-800';
+      case 'in-progress':
+        return 'bg-orange-100 text-orange-800';
+      case 'completed':
+        return 'bg-purple-100 text-purple-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
   const handleVideoCall = async (appointment) => {
     try {
-      // First, create a meeting link if it doesn't exist
       if (!appointment.meetingLink) {
-        const meetingRes = await axios.post(`/api/appointments/${appointment._id}/create-meeting`);
+        const meetingRes = await axios.post(
+          `/api/appointments/${appointment._id}/create-meeting`
+        );
         appointment.meetingLink = meetingRes.data.meetingLink;
       }
 
-      // Start the session
       await axios.post(`/api/appointments/${appointment._id}/start-session`);
-
-      // Open Google Meet in a new tab
       window.open(appointment.meetingLink, '_blank');
-      
-      // Update the appointments list to reflect the new status
       fetchDashboardData();
-      
-      console.log(`Starting video call for appointment: ${appointment._id}`);
     } catch (error) {
       console.error('Error starting video call:', error);
       alert('Failed to start video call. Please try again.');
@@ -107,7 +128,6 @@ export default function CounselorDashboard() {
     try {
       await axios.post(`/api/appointments/${appointment._id}/end-session`);
       fetchDashboardData();
-      console.log(`Session ended for appointment: ${appointment._id}`);
     } catch (error) {
       console.error('Error ending session:', error);
       alert('Failed to end session. Please try again.');
@@ -121,8 +141,11 @@ export default function CounselorDashboard() {
           <div className="animate-pulse">
             <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="bg-white p-6 rounded-lg shadow h-32"></div>
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white p-6 rounded-lg shadow h-32"
+                ></div>
               ))}
             </div>
           </div>
@@ -136,56 +159,87 @@ export default function CounselorDashboard() {
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Counselor Dashboard</h1>
-          <p className="text-gray-600 mt-2">Welcome back, {counselor?.firstName} {counselor?.lastName}</p>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Counselor Dashboard
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Welcome back, {counselor?.firstName} {counselor?.lastName}
+          </p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
+          {/* Total Sessions */}
+          <div className="bg-white rounded-lg shadow p-6 flex flex-col justify-between h-full">
             <div className="flex items-center">
               <div className="p-2 bg-blue-100 rounded-lg">
-                <Calendar className="h-6 w-6 text-blue-600" />
+                <CalendarIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Sessions</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalSessions}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Sessions
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.totalSessions}
+                </p>
               </div>
             </div>
+            <button
+              className="mt-6 w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+              onClick={() => setIsCalendarOpen(true)}
+            >
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              View Schedule
+            </button>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          {/* Average Rating */}
+          <div className="bg-white rounded-lg shadow p-6 flex flex-col justify-between h-full">
             <div className="flex items-center">
               <div className="p-2 bg-green-100 rounded-lg">
                 <TrendingUp className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Average Rating</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.averageRating.toFixed(1)} ⭐</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Average Rating
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.averageRating.toFixed(1)} ⭐
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          {/* Total Clients */}
+          <div className="bg-white rounded-lg shadow p-6 flex flex-col justify-between h-full">
             <div className="flex items-center">
               <div className="p-2 bg-purple-100 rounded-lg">
                 <Users className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Clients</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalClients}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Clients
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.totalClients}
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          {/* Upcoming Sessions */}
+          <div className="bg-white rounded-lg shadow p-6 flex flex-col justify-between h-full">
             <div className="flex items-center">
               <div className="p-2 bg-orange-100 rounded-lg">
                 <Clock className="h-6 w-6 text-orange-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Upcoming Sessions</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.upcomingSessions}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Upcoming Sessions
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.upcomingSessions}
+                </p>
               </div>
             </div>
           </div>
@@ -214,8 +268,11 @@ export default function CounselorDashboard() {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
             <div className="space-y-3">
-              <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center">
-                <Calendar className="h-4 w-4 mr-2" />
+              <button 
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                onClick={() => setIsCalendarOpen(true)}
+              >
+                <CalendarIcon className="h-4 w-4 mr-2" />
                 View Schedule
               </button>
               <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center">
@@ -370,6 +427,36 @@ export default function CounselorDashboard() {
             </div>
           </div>
         )}
+
+        {/* Calendar Modal */}
+        {isCalendarOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+            <div className="bg-white rounded-lg shadow-lg p-6 relative max-w-md w-full mx-4">
+              <button
+                className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-xl font-bold"
+                onClick={() => setIsCalendarOpen(false)}
+              >
+                &times;
+              </button>
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">Your Appointments Schedule</h3>
+              <Calendar
+                tileClassName={({ date, view }) => {
+                  // Mark dates that match appointment dates
+                  const isAppointment = appointments.some(apt =>
+                    new Date(apt.date).toDateString() === date.toDateString()
+                  );
+                  return isAppointment ? 'bg-blue-200 text-blue-900 rounded-full font-bold' : null;
+                }}
+                className="w-full"
+              />
+              <div className="mt-4 text-xs text-gray-500 text-center">
+                <span className="inline-block w-3 h-3 bg-blue-200 rounded-full mr-2"></span>
+                Blue dates = Appointment scheduled
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
