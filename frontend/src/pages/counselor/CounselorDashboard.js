@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Calendar, Clock, DollarSign, Users, TrendingUp, Settings, MessageSquare, Video } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Users, TrendingUp, Settings, MessageSquare, Video, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function CounselorDashboard() {
   const [counselor, setCounselor] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [earnings, setEarnings] = useState({ total: 0, thisMonth: 0, thisWeek: 0 });
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [appointmentsPerPage] = useState(10);
   const [stats, setStats] = useState({
     totalSessions: 0,
     averageRating: 0,
@@ -86,6 +88,9 @@ export default function CounselorDashboard() {
         const meetingRes = await axios.post(`/api/appointments/${appointment._id}/create-zoom-meeting`);
         appointment.meetingLink = meetingRes.data.join_url;
         appointment.zoomStartUrl = meetingRes.data.start_url;
+        
+        // Show success message
+        alert(`Meeting link created successfully!\n\nJoin URL: ${meetingRes.data.join_url}\n\nThis link has been shared with the client.`);
       }
 
       // Start the session
@@ -115,6 +120,26 @@ export default function CounselorDashboard() {
     } catch (error) {
       console.error('Error ending session:', error);
       alert('Failed to end session. Please try again.');
+    }
+  };
+
+  // Pagination logic
+  const indexOfLastAppointment = currentPage * appointmentsPerPage;
+  const indexOfFirstAppointment = indexOfLastAppointment - appointmentsPerPage;
+  const currentAppointments = appointments.slice(indexOfFirstAppointment, indexOfLastAppointment);
+  const totalPages = Math.ceil(appointments.length / appointmentsPerPage);
+
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
     }
   };
 
@@ -237,7 +262,10 @@ export default function CounselorDashboard() {
         {/* Recent Appointments */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Recent Appointments</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">All Appointments ({appointments.length})</h2>
+              <span className="text-sm text-gray-500">Showing {appointmentsPerPage} per page</span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -264,7 +292,7 @@ export default function CounselorDashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {appointments.slice(0, 5).map((appointment) => (
+                {currentAppointments.map((appointment) => (
                   <tr key={appointment._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -346,6 +374,49 @@ export default function CounselorDashboard() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center py-4 border-t border-gray-200">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={prevPage}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </button>
+                
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((number) => (
+                    <button
+                      key={number}
+                      onClick={() => paginate(number)}
+                      className={`px-3 py-1 border rounded-md text-sm ${
+                        currentPage === number
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {number}
+                    </button>
+                  ))}
+                </div>
+                
+                <button
+                  onClick={nextPage}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </button>
+              </div>
+              
+              <div className="ml-4 text-sm text-gray-600">
+                Showing {indexOfFirstAppointment + 1}-{Math.min(indexOfLastAppointment, appointments.length)} of {appointments.length} appointments
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Profile Summary */}

@@ -135,73 +135,83 @@ router.post('/:id/create-zoom-meeting', auth, async (req, res) => {
       });
     }
 
-    // Create Zoom meeting via Zoom API
+    // Try Zoom first, fallback to Google Meet
     const ZOOM_JWT_TOKEN = process.env.ZOOM_JWT_TOKEN;
-    if (!ZOOM_JWT_TOKEN) {
-      // Fall back to Google Meet if Zoom is not configured
-      console.log('Zoom JWT token not configured, falling back to Google Meet');
-      
-      // Generate unique meeting ID (Google Meet format: 3 letters, 4 numbers, 3 letters)
-      const letters = 'abcdefghijklmnopqrstuvwxyz';
-      const numbers = '0123456789';
-      let meetingId = '';
-      
-      // Generate 3 random letters
-      for (let i = 0; i < 3; i++) {
-        meetingId += letters.charAt(Math.floor(Math.random() * letters.length));
-      }
-      
-      // Generate 4 random numbers
-      for (let i = 0; i < 4; i++) {
-        meetingId += numbers.charAt(Math.floor(Math.random() * numbers.length));
-      }
-      
-      // Generate 3 more random letters
-      for (let i = 0; i < 3; i++) {
-        meetingId += letters.charAt(Math.floor(Math.random() * letters.length));
-      }
-      
-      const googleMeetUrl = `https://meet.google.com/${meetingId}`;
+    console.log('ZOOM_JWT_TOKEN exists:', !!ZOOM_JWT_TOKEN);
+    console.log('ZOOM_JWT_TOKEN length:', ZOOM_JWT_TOKEN ? ZOOM_JWT_TOKEN.length : 0);
+    
+    if (ZOOM_JWT_TOKEN) {
+      try {
+        console.log('Attempting to create Zoom meeting...');
+        console.log('Using JWT token:', ZOOM_JWT_TOKEN.substring(0, 20) + '...');
+        
+        const zoomRes = await axios.post(
+          'https://api.zoom.us/v2/users/me/meetings',
+          {
+            topic: `Counseling Session - ${appointment.client?.firstName} ${appointment.client?.lastName}`,
+            type: 1, // instant meeting
+            duration: appointment.duration || 50,
+            settings: {
+              host_video: true,
+              participant_video: true,
+              join_before_host: true,
+              mute_upon_entry: false,
+              watermark: false,
+              use_pmi: false,
+              approval_type: 0,
+              audio: 'both',
+              auto_recording: 'none'
+            }
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${ZOOM_JWT_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
 
-      // Update appointment with meeting link
-      appointment.meetingLink = googleMeetUrl;
-      appointment.zoomStartUrl = googleMeetUrl; // Save the same URL as start_url for Google Meet
-      appointment.status = 'confirmed';
-      await appointment.save();
+        console.log('Zoom API response:', zoomRes.data);
+        const { join_url, start_url } = zoomRes.data;
 
-      return res.json({
-        message: 'Google Meet link created successfully (Zoom not configured)',
-        join_url: googleMeetUrl,
-        start_url: googleMeetUrl,
-      });
+        // Save join_url and start_url to appointment
+        appointment.meetingLink = join_url;
+        appointment.zoomStartUrl = start_url;
+        appointment.status = 'confirmed';
+        await appointment.save();
+
+        return res.json({
+          message: 'Zoom meeting created successfully!',
+          join_url,
+          start_url,
+        });
+      } catch (error) {
+        console.error('Zoom API error:', error.response?.data || error);
+        console.log('Falling back to Google Meet...');
+      }
     }
-
-    const zoomRes = await axios.post(
-      'https://api.zoom.us/v2/users/me/meetings',
-      {
-        topic: 'Counseling Session',
-        type: 1, // instant meeting
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${ZOOM_JWT_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    const { join_url, start_url } = zoomRes.data;
-
-    // Save join_url and start_url to appointment
-    appointment.meetingLink = join_url;
-    appointment.zoomStartUrl = start_url; // You may want to add this field to your schema
+    
+    // Fallback to Google Meet
+    console.log('Creating Google Meet link...');
+    
+    // Create a simple meeting link for testing
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(2, 8);
+    const meetingId = `counseling-${timestamp}-${randomId}`;
+    const meetingUrl = `https://meet.google.com/${meetingId}`;
+    
+    // Update appointment with meeting link
+    appointment.meetingLink = meetingUrl;
+    appointment.zoomStartUrl = meetingUrl;
     appointment.status = 'confirmed';
     await appointment.save();
-
-    res.json({
-      message: 'Zoom meeting created successfully',
-      join_url,
-      start_url,
+    
+    console.log(`Google Meet link created for appointment ${appointment._id}: ${meetingUrl}`);
+    
+    return res.json({
+      message: 'Google Meet link created successfully (Zoom not configured or failed)',
+      join_url: meetingUrl,
+      start_url: meetingUrl,
     });
   } catch (error) {
     console.error('Create Zoom meeting error:', error.response?.data || error);

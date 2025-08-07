@@ -33,6 +33,10 @@ const ClientDashboard = () => {
     (apt) => apt.status === "in-progress" && apt.sessionType === "video"
   )
 
+  const sessionsWithLinks = appointments.filter(
+    (apt) => apt.meetingLink && (apt.status === "scheduled" || apt.status === "confirmed" || apt.status === "in-progress")
+  )
+
   const recentSessions = appointments.filter((apt) => apt.status === "completed").slice(0, 3)
 
   if (loading) {
@@ -222,6 +226,55 @@ const ClientDashboard = () => {
             </div>
           )}
         </div>
+
+        {/* Sessions with Meeting Links */}
+        {sessionsWithLinks.length > 0 && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center mb-6">
+              <Video className="h-5 w-5 mr-2 text-green-600" />
+              <h2 className="text-xl font-semibold">Video Sessions Ready to Join</h2>
+            </div>
+
+            <div className="space-y-4">
+              {sessionsWithLinks.map((session) => (
+                <div key={session._id} className="p-4 border rounded-lg bg-green-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">
+                      Dr. {session.counselor?.firstName} {session.counselor?.lastName}
+                    </h3>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      session.status === 'in-progress' ? 'bg-orange-100 text-orange-800' :
+                      session.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {session.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
+                    <span>{new Date(session.date).toLocaleDateString()}</span>
+                    <span>{session.time}</span>
+                    <span>{session.duration} minutes</span>
+                  </div>
+                  {session.meetingLink && (session.meetingLink.includes('zoom.us') || session.meetingLink.includes('meet.google.com')) && (
+                    <a 
+                      href={session.meetingLink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`px-4 py-2 rounded-md text-sm inline-flex items-center ${
+                        session.meetingLink.includes('zoom.us') 
+                          ? 'bg-green-600 hover:bg-green-700 text-white' 
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      }`}
+                    >
+                      <Video className="h-4 w-4 mr-1" />
+                      {session.meetingLink.includes('zoom.us') ? 'Join Zoom Call' : 'Join Video Call'}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recent Sessions */}
         <div className="bg-white rounded-lg shadow-lg p-6">
