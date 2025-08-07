@@ -3,16 +3,42 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import axios from "axios"
-import { Calendar, Video, MessageCircle, Clock, Star, Plus, Search } from "lucide-react"
+import { Calendar, Video, MessageCircle, Clock, Star, Plus, Search, X, MapPin, Filter } from "lucide-react"
 import ClientLayout from "../../components/ClientLayout"
 
 const ClientDashboard = () => {
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [counselors, setCounselors] = useState([])
+  const [filteredCounselors, setFilteredCounselors] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
 
   useEffect(() => {
     fetchAppointments()
   }, [])
+
+  useEffect(() => {
+    if (isSearchOpen && counselors.length === 0) {
+      fetchCounselors()
+    }
+  }, [isSearchOpen])
+
+  useEffect(() => {
+    // Filter counselors based on search query
+    if (searchQuery.trim() === "") {
+      setFilteredCounselors(counselors)
+    } else {
+      const filtered = counselors.filter(counselor =>
+        counselor.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        counselor.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        counselor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        counselor.bio?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      setFilteredCounselors(filtered)
+    }
+  }, [searchQuery, counselors])
 
   const fetchAppointments = async () => {
     try {
@@ -22,6 +48,19 @@ const ClientDashboard = () => {
       console.error("Error fetching appointments:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchCounselors = async () => {
+    setSearchLoading(true)
+    try {
+      const response = await axios.get("/api/counselors")
+      setCounselors(response.data)
+      setFilteredCounselors(response.data)
+    } catch (error) {
+      console.error("Error fetching counselors:", error)
+    } finally {
+      setSearchLoading(false)
     }
   }
 
@@ -70,7 +109,10 @@ const ClientDashboard = () => {
             <p className="text-sm text-gray-600">Chat with your counselors</p>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow cursor-pointer">
+          <div 
+            className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
+            onClick={() => setIsSearchOpen(true)}
+          >
             <div className="flex items-center mb-4">
               <Search className="h-6 w-6 text-purple-600" />
               <h3 className="ml-2 text-lg font-semibold">Find Counselors</h3>
@@ -177,6 +219,115 @@ const ClientDashboard = () => {
             </div>
           )}
         </div>
+
+        {/* Search Counselors Modal */}
+        {isSearchOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b">
+                <h2 className="text-2xl font-bold text-gray-900">Find Counselors</h2>
+                <button
+                  onClick={() => setIsSearchOpen(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="p-6 border-b bg-gray-50">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, specialization, or keywords..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Results */}
+              <div className="p-6 max-h-96 overflow-y-auto">
+                {searchLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredCounselors.length > 0 ? (
+                      filteredCounselors.map((counselor) => (
+                        <div key={counselor._id} className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+                          <div className="flex items-start space-x-4">
+                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-blue-600 font-semibold text-lg">
+                                {counselor.firstName?.[0]}{counselor.lastName?.[0]}
+                              </span>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                  Dr. {counselor.firstName} {counselor.lastName}
+                                </h3>
+                                <div className="flex items-center space-x-1">
+                                  <Star className="h-4 w-4 text-yellow-400 fill-current" />
+                                  <span className="text-sm text-gray-600">{counselor.rating || 4.5}</span>
+                                </div>
+                              </div>
+                              <p className="text-blue-600 font-medium mb-1">{counselor.specialization}</p>
+                              <p className="text-sm text-gray-600 mb-2">{counselor.bio || "Experienced counselor dedicated to helping clients achieve their goals."}</p>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-4 text-sm text-gray-500">
+                                  <span>${counselor.hourlyRate || 100}/hour</span>
+                                  <span>{counselor.experience || "5+ years"} experience</span>
+                                  {counselor.location && (
+                                    <div className="flex items-center">
+                                      <MapPin className="h-3 w-3 mr-1" />
+                                      <span>{counselor.location}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <Link to={`/client/counselor/${counselor._id}`}>
+                                  <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
+                                    View Profile
+                                  </button>
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600">
+                          {searchQuery ? "No counselors found matching your search." : "Start typing to search for counselors..."}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t bg-gray-50">
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-gray-600">
+                    {filteredCounselors.length} counselor{filteredCounselors.length !== 1 ? 's' : ''} found
+                  </p>
+                  <button
+                    onClick={() => setIsSearchOpen(false)}
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ClientLayout>
   )
