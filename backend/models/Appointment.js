@@ -69,6 +69,10 @@ const appointmentSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    zoomStartUrl: {
+      type: String,
+      default: "",
+    },
     sessionStartTime: {
       type: Date,
     },

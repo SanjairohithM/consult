@@ -10,7 +10,7 @@ export default function CounselorDashboard() {
   const [stats, setStats] = useState({
     totalSessions: 0,
     averageRating: 0,
-    totalClients: 0,
+    totalClients: 0,  
     upcomingSessions: 0
   });
 
@@ -81,21 +81,25 @@ export default function CounselorDashboard() {
 
   const handleVideoCall = async (appointment) => {
     try {
-      // First, create a meeting link if it doesn't exist
-      if (!appointment.meetingLink) {
-        const meetingRes = await axios.post(`/api/appointments/${appointment._id}/create-meeting`);
-        appointment.meetingLink = meetingRes.data.meetingLink;
+      // Create meeting if not exists (Zoom or Google Meet)
+      if (!appointment.meetingLink || (!appointment.meetingLink.includes('zoom.us') && !appointment.meetingLink.includes('meet.google.com'))) {
+        const meetingRes = await axios.post(`/api/appointments/${appointment._id}/create-zoom-meeting`);
+        appointment.meetingLink = meetingRes.data.join_url;
+        appointment.zoomStartUrl = meetingRes.data.start_url;
       }
 
       // Start the session
       await axios.post(`/api/appointments/${appointment._id}/start-session`);
 
-      // Open Google Meet in a new tab
-      window.open(appointment.meetingLink, '_blank');
-      
+      // Open meeting URL for counselor
+      if (appointment.zoomStartUrl) {
+        window.open(appointment.zoomStartUrl, '_blank');
+      } else {
+        window.open(appointment.meetingLink, '_blank');
+      }
+
       // Update the appointments list to reflect the new status
       fetchDashboardData();
-      
       console.log(`Starting video call for appointment: ${appointment._id}`);
     } catch (error) {
       console.error('Error starting video call:', error);
@@ -307,7 +311,7 @@ export default function CounselorDashboard() {
                           className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                         >
                           <Video className="h-3 w-3 mr-1" />
-                          Start Call
+                          {appointment.meetingLink && appointment.meetingLink.includes('zoom.us') ? 'Start Zoom Call' : 'Start Video Call'}
                         </button>
                       )}
                       {appointment.status === 'in-progress' && appointment.sessionType === 'video' && (
@@ -317,7 +321,7 @@ export default function CounselorDashboard() {
                             className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                           >
                             <Video className="h-3 w-3 mr-1" />
-                            Join Call
+                            {appointment.meetingLink && appointment.meetingLink.includes('zoom.us') ? 'Join Zoom Call' : 'Join Video Call'}
                           </button>
                           <button
                             onClick={() => handleEndSession(appointment)}
