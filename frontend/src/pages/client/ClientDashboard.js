@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import axios from "axios"
-import { Calendar, Video, MessageCircle, Clock, Star, Plus, Search, X, MapPin, Filter } from "lucide-react"
+import { Calendar, Video, MessageCircle, Clock, Star, Plus, Search, X, MapPin, Filter, ExternalLink, Copy } from "lucide-react"
 import ClientLayout from "../../components/ClientLayout"
 
 const ClientDashboard = () => {
@@ -17,6 +17,13 @@ const ClientDashboard = () => {
 
   useEffect(() => {
     fetchAppointments()
+    
+    // Set up polling to check for meeting links every 30 seconds
+    const interval = setInterval(() => {
+      fetchAppointments()
+    }, 30000)
+
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -26,7 +33,6 @@ const ClientDashboard = () => {
   }, [isSearchOpen])
 
   useEffect(() => {
-    // Filter counselors based on search query
     if (searchQuery.trim() === "") {
       setFilteredCounselors(counselors)
     } else {
@@ -64,8 +70,21 @@ const ClientDashboard = () => {
     }
   }
 
+  const copyMeetingLink = (link) => {
+    navigator.clipboard.writeText(link)
+    alert('Meeting link copied to clipboard!')
+  }
+
+  const joinMeeting = (meetingLink) => {
+    if (meetingLink) {
+      window.open(meetingLink, '_blank')
+    } else {
+      alert('Meeting link not available yet. Please wait for your counselor to start the session.')
+    }
+  }
+
   const upcomingAppointments = appointments.filter(
-    (apt) => apt.status === "scheduled" && new Date(apt.date) >= new Date(),
+    (apt) => (apt.status === "scheduled" || apt.status === "confirmed") && new Date(apt.date) >= new Date(),
   )
 
   const recentSessions = appointments.filter((apt) => apt.status === "completed").slice(0, 3)
@@ -150,18 +169,56 @@ const ClientDashboard = () => {
                           {new Date(appointment.date).toLocaleDateString()} at {appointment.time}
                         </span>
                       </div>
+                      {/* Meeting Link Status */}
+                      {appointment.sessionType === 'video' && (
+                        <div className="mt-2">
+                          {appointment.meetingLink ? (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                                Meeting Ready
+                              </span>
+                              <button
+                                onClick={() => copyMeetingLink(appointment.meetingLink)}
+                                className="text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                <Copy className="h-3 w-3 inline mr-1" />
+                                Copy Link
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded">
+                              Waiting for counselor to start
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                       {appointment.sessionType}
                     </span>
-                    <Link to={`/session/${appointment._id}`}>
-                      <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
-                        <Video className="h-4 w-4 mr-1 inline" />
-                        Join
+                    {appointment.sessionType === 'video' ? (
+                      <button 
+                        onClick={() => joinMeeting(appointment.meetingLink)}
+                        className={`px-4 py-2 rounded-md text-sm flex items-center ${
+                          appointment.meetingLink 
+                            ? 'bg-green-600 hover:bg-green-700 text-white' 
+                            : 'bg-gray-400 text-white cursor-not-allowed'
+                        }`}
+                        disabled={!appointment.meetingLink}
+                      >
+                        <Video className="h-4 w-4 mr-1" />
+                        {appointment.meetingLink ? 'Join Meeting' : 'Waiting...'}
                       </button>
-                    </Link>
+                    ) : (
+                      <Link to={`/session/${appointment._id}`}>
+                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
+                          <Calendar className="h-4 w-4 mr-1 inline" />
+                          View Details
+                        </button>
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}
@@ -207,6 +264,7 @@ const ClientDashboard = () => {
                   <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
                     <span>{new Date(session.date).toLocaleDateString()}</span>
                     <span>{session.duration} minutes</span>
+                    <span className="capitalize">{session.sessionType}</span>
                   </div>
                   {session.feedback && <p className="text-sm text-gray-700">{session.feedback}</p>}
                 </div>
@@ -220,11 +278,10 @@ const ClientDashboard = () => {
           )}
         </div>
 
-        {/* Search Counselors Modal */}
+        {/* Search Counselors Modal - Rest of your existing modal code stays the same */}
         {isSearchOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
-              {/* Modal Header */}
               <div className="flex items-center justify-between p-6 border-b">
                 <h2 className="text-2xl font-bold text-gray-900">Find Counselors</h2>
                 <button
@@ -235,7 +292,6 @@ const ClientDashboard = () => {
                 </button>
               </div>
 
-              {/* Search Bar */}
               <div className="p-6 border-b bg-gray-50">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
@@ -249,7 +305,6 @@ const ClientDashboard = () => {
                 </div>
               </div>
 
-              {/* Results */}
               <div className="p-6 max-h-96 overflow-y-auto">
                 {searchLoading ? (
                   <div className="flex items-center justify-center py-8">
@@ -311,7 +366,6 @@ const ClientDashboard = () => {
                 )}
               </div>
 
-              {/* Modal Footer */}
               <div className="p-6 border-t bg-gray-50">
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-600">

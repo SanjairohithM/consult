@@ -28,19 +28,40 @@ router.get("/", auth, async (req, res) => {
   }
 })
 
+// Get single appointment by ID
+router.get("/:id", auth, async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id)
+      .populate("counselor", "firstName lastName specialization avatar")
+      .populate("client", "firstName lastName avatar");
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    if (appointment.client._id.toString() !== req.user.userId && 
+        appointment.counselor._id.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    res.json(appointment);
+  } catch (error) {
+    console.error("Get appointment error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Create new appointment
 router.post("/", auth, async (req, res) => {
   try {
     const { counselorId, date, time, sessionType, notes } = req.body
     const clientId = req.user.userId
 
-    // Get counselor details for pricing
     const counselor = await User.findById(counselorId)
     if (!counselor || counselor.userType !== "counselor") {
       return res.status(404).json({ message: "Counselor not found" })
     }
 
-    // Create appointment
     const appointment = new Appointment({
       client: clientId,
       counselor: counselorId,
@@ -52,8 +73,6 @@ router.post("/", auth, async (req, res) => {
     })
 
     await appointment.save()
-
-    // Populate the appointment with user details
     await appointment.populate("counselor", "firstName lastName specialization")
 
     res.status(201).json({
@@ -66,48 +85,127 @@ router.post("/", auth, async (req, res) => {
   }
 })
 
-// Create Google Meet link for video session
-router.post("/:id/create-meeting", auth, async (req, res) => {
+// NEW: Send meeting link to client (counselor manually shares Google Meet link)
+router.post("/:id/send-meeting-link", auth, async (req, res) => {
   try {
-    const appointment = await Appointment.findById(req.params.id);
+    const { meetingLink } = req.body;
+    const appointment = await Appointment.findById(req.params.id)
+      .populate("client", "firstName lastName email")
+      .populate("counselor", "firstName lastName");
+
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
-    // Generate unique meeting ID (Google Meet format: 3 letters, 4 numbers, 3 letters)
-    const letters = 'abcdefghijklmnopqrstuvwxyz';
-    const numbers = '0123456789';
-    let meetingId = '';
-    
-    // Generate 3 random letters
-    for (let i = 0; i < 3; i++) {
-      meetingId += letters.charAt(Math.floor(Math.random() * letters.length));
+    // Check if user is authorized (should be the counselor)
+    if (appointment.counselor._id.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized" });
     }
-    
-    // Generate 4 random numbers
-    for (let i = 0; i < 4; i++) {
-      meetingId += numbers.charAt(Math.floor(Math.random() * numbers.length));
+
+    // Validate Google Meet URL format
+    if (!meetingLink || !meetingLink.includes('meet.google.com')) {
+      return res.status(400).json({ message: "Please provide a valid Google Meet link" });
     }
-    
-    // Generate 3 more random letters
-    for (let i = 0; i < 3; i++) {
-      meetingId += letters.charAt(Math.floor(Math.random() * letters.length));
-    }
-    
-    const googleMeetUrl = `https://meet.google.com/${meetingId}`;
 
     // Update appointment with meeting link
-    appointment.meetingLink = googleMeetUrl;
+    appointment.meetingLink = meetingLink;
+    appointment.meetingPlatform = "google-meet-manual";
     appointment.status = "confirmed";
+    appointment.meetingCreatedAt = new Date();
+
+    // Add notification
+    if (!appointment.notifications) {
+      appointment.notifications = [];
+    }
+
+    appointment.notifications.push({
+      message: `Meeting link shared: ${meetingLink}`,
+      timestamp: new Date(),
+      type: 'meeting_link_shared',
+      meetingLink: meetingLink
+    });
+
     await appointment.save();
 
     res.json({
-      message: "Meeting link created successfully",
-      meetingLink: googleMeetUrl,
-      meetingId: meetingId
+      message: "Meeting link sent to client successfully",
+      meetingLink: meetingLink,
+      appointment: appointment
     });
   } catch (error) {
-    console.error("Create meeting error:", error);
+    console.error("Send meeting link error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// NEW: Get meeting link for client
+router.get("/:id/meeting-link", auth, async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id)
+      .populate("counselor", "firstName lastName");
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Check if user is authorized (client or counselor)
+    if (appointment.client.toString() !== req.user.userId && 
+        appointment.counselor._id.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    res.json({
+      meetingLink: appointment.meetingLink || null,
+      status: appointment.status,
+      meetingAvailable: !!appointment.meetingLink
+    });
+  } catch (error) {
+    console.error("Get meeting link error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// UPDATED: Notify client about meeting updates
+router.post("/:id/notify-client", auth, async (req, res) => {
+  try {
+    const { message, meetingLink } = req.body;
+    const appointment = await Appointment.findById(req.params.id)
+      .populate("client", "firstName lastName email")
+      .populate("counselor", "firstName lastName");
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    if (appointment.counselor._id.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    if (!appointment.notifications) {
+      appointment.notifications = [];
+    }
+
+    appointment.notifications.push({
+      message,
+      timestamp: new Date(),
+      type: 'meeting_notification',
+      meetingLink
+    });
+
+    await appointment.save();
+
+    console.log(`Notification for ${appointment.client.email}: ${message}`);
+
+    res.json({ 
+      message: "Client notified successfully",
+      notification: {
+        clientEmail: appointment.client.email,
+        message,
+        timestamp: new Date()
+      }
+    });
+  } catch (error) {
+    console.error("Notify client error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -120,7 +218,14 @@ router.post("/:id/start-session", auth, async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
-    // Update appointment status to in-progress
+    if (appointment.counselor.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    if (appointment.sessionType === 'video' && !appointment.meetingLink) {
+      return res.status(400).json({ message: "Meeting link not shared yet" });
+    }
+
     appointment.status = "in-progress";
     appointment.sessionStartTime = new Date();
     await appointment.save();
@@ -143,14 +248,28 @@ router.post("/:id/end-session", auth, async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
-    // Update appointment status to completed
+    if (appointment.counselor.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const sessionEndTime = new Date();
+    
+    let duration = null;
+    if (appointment.sessionStartTime) {
+      duration = Math.round((sessionEndTime - appointment.sessionStartTime) / (1000 * 60));
+    }
+
     appointment.status = "completed";
-    appointment.sessionEndTime = new Date();
+    appointment.sessionEndTime = sessionEndTime;
+    if (duration) {
+      appointment.duration = duration;
+    }
     await appointment.save();
 
     res.json({
       message: "Session ended successfully",
-      appointment: appointment
+      appointment: appointment,
+      duration: duration
     });
   } catch (error) {
     console.error("End session error:", error);
@@ -169,7 +288,6 @@ router.patch("/:id/status", auth, async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" })
     }
 
-    // Check if user is authorized to update this appointment
     if (appointment.client.toString() !== req.user.userId && appointment.counselor.toString() !== req.user.userId) {
       return res.status(403).json({ message: "Not authorized" })
     }

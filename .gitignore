@@ -173,3 +173,6 @@ typings/
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Google Cloud Service Account Keys
+backend/config/google-service-account.json
